@@ -82,3 +82,5 @@ export var runtime = {
   LoaderHooks,
   TraceurLoader
 }
+
+export {Project} from './Project';

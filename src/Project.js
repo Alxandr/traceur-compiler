@@ -147,7 +147,7 @@ export class Project {
   
   compile() {
     var reporter = new SinkErrorReporter();
-    inlineAndCompile(this.files_, this.options_, reporter).then(tree => {
+    return inlineAndCompile(this.files_, this.options_, reporter).then(tree => {
       var options;
       if(this.options_.sourceMap) {
         var sourceMapGenerator = new SourceMapGenerator({
