@@ -18,9 +18,11 @@ import {TraceurLoader} from './runtime/TraceurLoader';
 import {LoaderHooks} from './runtime/LoaderHooks';
 import {Script} from './syntax/trees/ParseTrees';
 import {SourceMapGenerator} from './outputgeneration/SourceMapIntegration'
+import {TreeWriter} from './outputgeneration/TreeWriter'
 
 var getOwnHashObject = $traceurRuntime.getOwnHashObject;
 var $hasOwnProperty = Object.prototype.hasOwnProperty;
+var globalNum = 0;
 
 function normalizePath(s) {
   return s.replace(/\\/g, '/');
@@ -28,9 +30,10 @@ function normalizePath(s) {
 
 function clone(obj) {
   var ret = [];
-  Object.keys(obj).each(key => {
+  Object.keys(obj).forEach(key => {
     ret[key] = obj[key];
   });
+  return ret;
 }
 
 class SinkErrorReporter extends ErrorReporter {
@@ -46,7 +49,7 @@ class SinkErrorReporter extends ErrorReporter {
   }
   
   get errors() {
-    return [for (e in this.errors_) e];
+    return [for (e of this.errors_) e];
   }
   
   clearError() {
@@ -61,6 +64,19 @@ class ProjectLoader extends TraceurLoader {
     this.files_ = files;
     this.elements_ = [];
   }
+
+  fetch_(url) {
+    return new Promise((resolve, reject) => {
+      for(var i = 0, l = this.files_.length; i < l; i++) {
+        var f = this.files_[i];
+        if(f.name === url) {
+          resolve(f.content);
+          return;
+        }
+      }
+      reject(new Error('File not found in project'));
+    });
+  }
 }
 
 class ProjectLoaderHooks extends LoaderHooks {
@@ -73,6 +89,10 @@ class ProjectLoaderHooks extends LoaderHooks {
     // Don't eval. Instead append the trees to the output.
     var tree = codeUnit.metadata.transformedTree;
     this.loader_.elements_.push.apply(this.loader_.elements_, tree.scriptItemList);
+  }
+
+  fetch(codeUnit) {
+    return this.loader_.fetch_(codeUnit.url);
   }
 }
 
@@ -93,11 +113,11 @@ function inlineAndCompile(files, options, reporter) {
       // Create tree for System.get('normalizedName');
       var tree =
         traceur.codegeneration.module.createModuleEvaluationStatement(normalizedName);
-      loader.addElement(tree);
+      loader.elements_.push(tree);
     }
     
     function loadNext() {
-      var loadAsScript = scriptsCount && (loadCount < scriptsCount);
+      var loadAsScript = false //files.length && (loadCount < files.length);
       var doEvaluateModule = false;
       var loadFunction = loader.import;
       var file = files[loadCount];
@@ -109,10 +129,10 @@ function inlineAndCompile(files, options, reporter) {
         if (options.modules !== 'inline' && options.modules !== 'instantiate')
           doEvaluateModule = true;
       }
-      var loadOptions = {referrerName: referrerName};
+      var loadOptions = {referrerName: options.referrer, address: name};
       loadFunction.call(loader, name, loadOptions).then(() => {
         if (doEvaluateModule) {
-          appendEvaluateModule(name, referrerName);
+          appendEvaluateModule(name, options.referrer);
         }
         loadCount++;
         if (loadCount < files.length) {
@@ -121,8 +141,10 @@ function inlineAndCompile(files, options, reporter) {
           var tree = allLoaded(loader.elements_);
           resolve(tree);
         }
-      }, err => reject(err));
+      }, reject);
     }
+
+    loadNext();
   });
 }
 
@@ -141,7 +163,13 @@ export class Project {
         throw new Error('Name already in use');
       }
       this.fileNames_.set(name, true);
+    } else {
+      do {
+        name = `_@${++globalNum}.js`;
+      } while(this.fileNames_.has(name));
+      this.fileNames_.set(name, true);
     }
+
     this.files_.push({content, name});
   }
   
@@ -158,8 +186,8 @@ export class Project {
       
       return {
         js: TreeWriter.write(tree, options),
-        errors: errorReporter.errors,
-        sourceMap: options.sourceMap || null
+        errors: reporter.errors,
+        sourceMap: (options || {}).sourceMap || null
       };
     });
   }

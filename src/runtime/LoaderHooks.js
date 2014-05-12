@@ -94,6 +94,7 @@ export class LoaderHooks {
   }
 
   parse(codeUnit) {
+    debugger;
     assert(!codeUnit.metadata.tree);
     var reporter = this.reporter;
     var normalizedName = codeUnit.normalizedName;
