@@ -64,7 +64,7 @@ class ProjectLoader extends TraceurLoader {
     this.files_ = files;
     this.elements_ = [];
   }
-
+  
   fetch_(url) {
     return new Promise((resolve, reject) => {
       for(var i = 0, l = this.files_.length; i < l; i++) {
@@ -118,6 +118,11 @@ function inlineAndCompile(files, options, reporter) {
     
     function loadNext() {
       var loadAsScript = false //files.length && (loadCount < files.length);
+      loader.addElement(tree);
+    }
+    
+    function loadNext() {
+      var loadAsScript = scriptsCount && (loadCount < scriptsCount);
       var doEvaluateModule = false;
       var loadFunction = loader.import;
       var file = files[loadCount];
